@@ -81,11 +81,11 @@
     .game-wrap{
       display:grid;
       grid-template-columns: 68px 1fr 80px;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto;
       grid-template-areas:
         "hold next stats"
         "board board board";
-      gap:6px; max-width:none; flex:1 1 auto; min-height:0;
+      gap:6px; max-width:none; flex:1 1 auto; min-height:0; overflow:hidden;
     }
     .side-panel{ display:contents; }
     .legend{ display:none; }
@@ -99,7 +99,7 @@
       grid-area:board; min-height:0; width:100%;
       display:flex; align-items:center; justify-content:center;
     }
-    #board{ max-width:100%; max-height:100%; width:auto; height:auto; }
+    #board{ max-width:100%; width:auto; height:auto; }
     .hint{ flex:0 0 auto; font-size:0.58rem; margin:2px 0; line-height:1.25; }
     .touch-controls{ flex:0 0 auto; gap:5px; margin-top:0; max-width:none; }
     .touch-controls button{ min-width:44px; min-height:40px; padding:4px 6px; font-size:0.72rem; }
@@ -517,8 +517,33 @@
       nextCanvas.width = 88; nextCanvas.height = 264;
     }
   }
-  window.addEventListener('resize', applyResponsiveCanvasSizes);
-  window.addEventListener('orientationchange', applyResponsiveCanvasSizes);
+
+  // CSS grid "auto"/"1fr" rows don't reliably shrink-to-fit when the grid
+  // itself is being compressed by an outer flex layout (mobile browsers were
+  // letting the board overflow into the hint/button rows below it). Instead,
+  // measure the real available space and set the board's max-height in
+  // pixels directly - that always matches what actually got laid out.
+  const appEl = document.getElementById('app');
+  const hintEl = document.querySelector('.hint');
+  const controlsEl = document.querySelector('.touch-controls');
+  function fitMobileBoard(){
+    const mobile = window.innerWidth <= 700;
+    if(!mobile){ boardCanvas.style.maxHeight = ''; return; }
+    const appBottom = appEl.getBoundingClientRect().bottom;
+    const boardTop = boardCanvas.getBoundingClientRect().top;
+    const belowHeight = (hintEl ? hintEl.getBoundingClientRect().height : 0)
+      + (controlsEl ? controlsEl.getBoundingClientRect().height : 0);
+    const cs = getComputedStyle(appEl);
+    const gap = parseFloat(cs.rowGap || cs.gap) || 0;
+    const available = appBottom - boardTop - belowHeight - gap*2 - 6;
+    boardCanvas.style.maxHeight = Math.max(120, Math.floor(available)) + 'px';
+  }
+  function refreshLayout(){
+    applyResponsiveCanvasSizes();
+    fitMobileBoard();
+  }
+  window.addEventListener('resize', refreshLayout);
+  window.addEventListener('orientationchange', refreshLayout);
 
   // ---------- main loop ----------
   function update(time){
@@ -638,7 +663,8 @@
     dropInterval = 1000; dropCounter = 0;
     isLocking = false; lockTimer = 0;
     paused = false; gameOver = false; started = true;
-    applyResponsiveCanvasSizes();
+    refreshLayout();
+    requestAnimationFrame(refreshLayout); // re-check after first paint settles
     updateStats();
     lastTime = 0;
     requestAnimationFrame(update);
