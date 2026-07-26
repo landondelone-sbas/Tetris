@@ -73,9 +73,36 @@
     .hint.mobile-only{ display:none; }
   }
   @media (max-width:700px){
+    html, body{ height:100vh; height:100dvh; overflow:hidden; }
+    #app{
+      height:100vh; height:100dvh; padding:6px; gap:4px; overflow:hidden;
+    }
+    h1{ font-size:1rem; margin:2px 0; flex:0 0 auto; }
+    .game-wrap{
+      display:grid;
+      grid-template-columns: 68px 1fr 80px;
+      grid-template-rows: auto 1fr;
+      grid-template-areas:
+        "hold next stats"
+        "board board board";
+      gap:6px; max-width:none; flex:1 1 auto; min-height:0;
+    }
+    .side-panel{ display:contents; }
     .legend{ display:none; }
-    .side-panel{ width:84px; }
-    .box h3{ font-size:0.6rem; }
+    #holdBox{ grid-area:hold; }
+    #nextBox{ grid-area:next; }
+    #statsBox{ grid-area:stats; }
+    .box h3{ font-size:0.55rem; margin-bottom:4px; }
+    .stats .stat{ margin-bottom:4px; }
+    .stats .stat-value{ font-size:0.9rem; }
+    .board-wrap{
+      grid-area:board; min-height:0; width:100%;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #board{ max-width:100%; max-height:100%; width:auto; height:auto; }
+    .hint{ flex:0 0 auto; font-size:0.58rem; margin:2px 0; line-height:1.25; }
+    .touch-controls{ flex:0 0 auto; gap:5px; margin-top:0; max-width:none; }
+    .touch-controls button{ min-width:44px; min-height:40px; padding:4px 6px; font-size:0.72rem; }
   }
 </style>
 </head>
@@ -84,7 +111,7 @@
   <h1>TETRIS</h1>
   <div class="game-wrap">
     <div class="side-panel">
-      <div class="box">
+      <div class="box" id="holdBox">
         <h3>HOLD</h3>
         <canvas id="holdCanvas" width="88" height="88"></canvas>
       </div>
@@ -112,11 +139,11 @@
     </div>
 
     <div class="side-panel">
-      <div class="box">
+      <div class="box" id="nextBox">
         <h3>NEXT</h3>
         <canvas id="nextCanvas" width="88" height="264"></canvas>
       </div>
-      <div class="box stats">
+      <div class="box stats" id="statsBox">
         <div class="stat"><div class="stat-label">SCORE</div><div class="stat-value" id="scoreVal">0</div></div>
         <div class="stat"><div class="stat-label">LEVEL</div><div class="stat-value" id="levelVal">1</div></div>
         <div class="stat"><div class="stat-label">LINES</div><div class="stat-value" id="linesVal">0</div></div>
@@ -438,32 +465,60 @@
     c.clearRect(0,0,canvas.width, canvas.height);
     if(!type) return;
     const size = PIECES[type].size;
-    const cell = 20;
+    const cell = Math.max(6, Math.floor((Math.min(canvas.width, canvas.height) - 8) / 4));
     const offX = (canvas.width - size*cell)/2;
-    const offY = 4;
+    const offY = (canvas.height - size*cell)/2;
     const cells = PIECES[type].rotations[0];
     for(const [r,c2] of cells){
       drawCell(c, offX + c2*cell, offY + r*cell, cell, PIECES[type].color);
     }
   }
 
+  // Next-queue layout switches between a vertical stack (desktop, tall narrow
+  // canvas) and a horizontal row (mobile, wide short canvas) based on the
+  // canvas element's current aspect ratio, which applyResponsiveCanvasSizes()
+  // sets per screen size.
   function drawSidePanels(){
     drawMini(holdCtx, holdCanvas, holdType);
     nextCtx.clearRect(0,0,nextCanvas.width, nextCanvas.height);
+    const horizontal = nextCanvas.width > nextCanvas.height;
     for(let i=0;i<3;i++){
       const type = queue[i];
       if(!type) continue;
       const size = PIECES[type].size;
-      const cell = 18;
-      const slotH = 88;
-      const offX = (nextCanvas.width - size*cell)/2;
-      const offY = i*slotH + (slotH - size*cell)/2;
       const cells = PIECES[type].rotations[0];
-      for(const [r,c] of cells){
-        drawCell(nextCtx, offX + c*cell, offY + r*cell, cell, PIECES[type].color);
+      if(horizontal){
+        const slotW = nextCanvas.width/3;
+        const cell = Math.max(6, Math.floor((Math.min(slotW, nextCanvas.height) - 6) / 4));
+        const offX = i*slotW + (slotW - size*cell)/2;
+        const offY = (nextCanvas.height - size*cell)/2;
+        for(const [r,c] of cells){
+          drawCell(nextCtx, offX + c*cell, offY + r*cell, cell, PIECES[type].color);
+        }
+      } else {
+        const cell = 18;
+        const slotH = 88;
+        const offX = (nextCanvas.width - size*cell)/2;
+        const offY = i*slotH + (slotH - size*cell)/2;
+        for(const [r,c] of cells){
+          drawCell(nextCtx, offX + c*cell, offY + r*cell, cell, PIECES[type].color);
+        }
       }
     }
   }
+
+  function applyResponsiveCanvasSizes(){
+    const mobile = window.innerWidth <= 700;
+    if(mobile){
+      holdCanvas.width = 60; holdCanvas.height = 60;
+      nextCanvas.width = 200; nextCanvas.height = 60;
+    } else {
+      holdCanvas.width = 88; holdCanvas.height = 88;
+      nextCanvas.width = 88; nextCanvas.height = 264;
+    }
+  }
+  window.addEventListener('resize', applyResponsiveCanvasSizes);
+  window.addEventListener('orientationchange', applyResponsiveCanvasSizes);
 
   // ---------- main loop ----------
   function update(time){
@@ -583,6 +638,7 @@
     dropInterval = 1000; dropCounter = 0;
     isLocking = false; lockTimer = 0;
     paused = false; gameOver = false; started = true;
+    applyResponsiveCanvasSizes();
     updateStats();
     lastTime = 0;
     requestAnimationFrame(update);
